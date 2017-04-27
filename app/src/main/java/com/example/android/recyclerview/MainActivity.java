@@ -16,12 +16,17 @@
 package com.example.android.recyclerview;
 
 import android.app.AlertDialog;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
+import android.support.v7.widget.helper.ItemTouchHelper;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -35,29 +40,21 @@ public class MainActivity extends AppCompatActivity
         implements MissionAdapter.ListItemClickListener {
 
     private static final int NUM_LIST_ITEMS = 100;
-
-    /*
-     * References to RecyclerView and Adapter to reset the list to its
-     * "pretty" state when the reset menu item is clicked.
-     */
     private MissionAdapter mAdapter;
     private RecyclerView mNumbersList;
+    private SQLiteDatabase mDb;
     final Context mContext = this;
     private Button mButton;
-    //private EditText etOutput;
-    // COMPLETED (9) Create a Toast variable called mToast to store the current Toast
-    /*
-     * If we hold a reference to our Toast, we can cancel it (if it's showing)
-     * to display a new Toast. If we didn't do this, Toasts would be delayed
-     * in showing up if you clicked many list items in quick succession.
-     */
     private Toast mToast;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
+        MissionDbHelper dbHelper = new MissionDbHelper(this);
+        mDb = dbHelper.getWritableDatabase();
+        Cursor dbMissions = getMissionsFromDB();
+        onListItemClick(dbMissions.toString());
         mButton = (Button) findViewById(R.id.btn_dialog);
         //etOutput = (EditText) findViewById(R.id.et_output);
 
@@ -85,13 +82,13 @@ public class MainActivity extends AppCompatActivity
          * Use this setting to improve performance if you know that changes in content do not
          * change the child layout size in the RecyclerView
          */
-        mNumbersList.setHasFixedSize(true);
+        mNumbersList.setHasFixedSize(false);
 
         // COMPLETED (13) Pass in this as the ListItemClickListener to the GreenAdapter constructor
         /*
          * The GreenAdapter is responsible for displaying each item in the list.
          */
-        mAdapter = new MissionAdapter(0,this);//(NUM_LIST_ITEMS, this);
+        mAdapter = new MissionAdapter(dbMissions,this);//(NUM_LIST_ITEMS, this);
         mNumbersList.setAdapter(mAdapter);
 
         // set mButton on click listener
@@ -122,7 +119,15 @@ public class MainActivity extends AppCompatActivity
                                         // get user input and set it to etOutput
                                         // edit text
                                         //etOutput.setText(userInputMission.getText() + " Due "+userInputDate.getText());
-                                        mAdapter.addMission(userInputMission.getText() + " Due "+userInputDate.getText());
+                                        if(!(userInputDate.getText().length() == 0 || userInputMission.getText().length() == 0))
+                                        {
+                                            //old
+                                            //mAdapter.addMission(userInputMission.getText() + " Due "+userInputDate.getText());
+                                            addMission(userInputMission.getText().toString() ,userInputDate.getText().toString());
+                                            mAdapter.SwapCursor(getMissionsFromDB());
+
+                                        }
+
                                     }
                                 })
                         .setNegativeButton("Cancel",
@@ -138,8 +143,46 @@ public class MainActivity extends AppCompatActivity
                 alertDialog.show();
             }
         });
+
+        new ItemTouchHelper(new ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT) {
+            public boolean onMove(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder, RecyclerView.ViewHolder target) {
+                //do nothing, we only care about swiping
+                return false;
+            }
+
+            public void onSwiped(RecyclerView.ViewHolder viewHolder, int swipeDir) {
+                //get the id of the item being swiped
+                long id = (long) viewHolder.itemView.getTag();
+                //remove from DB
+                long linesRemoved = removeMission(id);
+                Log.d(MissionAdapter.class.getSimpleName(),"removed " + linesRemoved + " lines");
+                //update the list
+                mAdapter.SwapCursor(getMissionsFromDB());
+            }
+        }).attachToRecyclerView(mNumbersList);
     }
 
+    private long removeMission(long id)
+    {
+        Log.d(MissionAdapter.class.getSimpleName(),"tyina  remove line " + id);
+        //Cursor c = getMissionsFromDB();
+        //c.moveToPosition(id);
+        //Log.d(MissionAdapter.class.getSimpleName(),c.getString(id));
+        return mDb.delete(MissionContract.MissionEntry.TABLE_NAME, MissionContract.MissionEntry._ID + "=" + id, null);
+    }
+
+    private long addMission(String mission_desc,String mission_date)
+    {
+        ContentValues cv = new ContentValues();
+        cv.put(MissionContract.MissionEntry.COLUMN_MISSION_DESC,mission_desc);
+        cv.put(MissionContract.MissionEntry.COLUMN_DUE_DATE,mission_date);
+        return mDb.insert(MissionContract.MissionEntry.TABLE_NAME,null,cv);
+        //old
+        /*
+        mMissions.add(mMissions.size(),mission_desc + " due " + mission_date);
+        mNumberItems ++;
+        */
+    }
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         //getMenuInflater().inflate(R.menu.main, menu);
@@ -167,18 +210,16 @@ public class MainActivity extends AppCompatActivity
 
         return super.onOptionsItemSelected(item);
     }
+    private Cursor getMissionsFromDB()
+    {
+        return mDb.query(MissionContract.MissionEntry.TABLE_NAME,null,null,null,null,null, MissionContract.MissionEntry._ID);
+    }
 
-    // COMPLETED (10) Override ListItemClickListener's onListItemClick method
-    /**
-     * This is where we receive our callback from
-     * {@link MissionAdapter.ListItemClickListener}
-     *
-     * This callback is invoked when you click on an item in the list.
-     *
-     * @param clickedItemIndex Index in the list of the item that was clicked.
-     */
-    @Override
-    public void onListItemClick(int clickedItemIndex) {
+    public void onListItemClick(int toastString){
+
+    }
+
+    public void onListItemClick(String toastString) {
         // COMPLETED (11) In the beginning of the method, cancel the Toast if it isn't null
         /*
          * Even if a Toast isn't showing, it's okay to cancel it. Doing so
@@ -199,8 +240,8 @@ public class MainActivity extends AppCompatActivity
          *
          *                     Item #42 clicked.
          */
-        String toastMessage = "Item #" + clickedItemIndex + " clicked.";
-        mToast = Toast.makeText(this, toastMessage, Toast.LENGTH_LONG);
+        //String toastMessage = "Item #" + clickedItemIndex + " clicked.";
+        mToast = Toast.makeText(this, toastString, Toast.LENGTH_LONG);
 
         mToast.show();
     }

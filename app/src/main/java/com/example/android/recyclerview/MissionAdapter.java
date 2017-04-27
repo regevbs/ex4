@@ -16,8 +16,10 @@
 package com.example.android.recyclerview;
 
 import android.app.AlertDialog;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.database.Cursor;
 import android.support.v7.widget.RecyclerView;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -53,57 +55,12 @@ public class MissionAdapter extends RecyclerView.Adapter<MissionAdapter.NumberVi
      * An on-click handler that we've defined to make it easy for an Activity to interface with
      * our RecyclerView
      */
-    final private ListItemClickListener mOnClickListener;
-
-    /*
-     * The number of ViewHolders that have been created. Typically, you can figure out how many
-     * there should be by determining how many list items fit on your screen at once and add 2 to 4
-     * to that number. That isn't the exact formula, but will give you an idea of how many
-     * ViewHolders have been created to display any given RecyclerView.
-     *
-     * Here's some ASCII art to hopefully help you understand:
-     *
-     *    ViewHolders on screen:
-     *
-     *        *-----------------------------*
-     *        |         ViewHolder index: 0 |
-     *        *-----------------------------*
-     *        |         ViewHolder index: 1 |
-     *        *-----------------------------*
-     *        |         ViewHolder index: 2 |
-     *        *-----------------------------*
-     *        |         ViewHolder index: 3 |
-     *        *-----------------------------*
-     *        |         ViewHolder index: 4 |
-     *        *-----------------------------*
-     *        |         ViewHolder index: 5 |
-     *        *-----------------------------*
-     *        |         ViewHolder index: 6 |
-     *        *-----------------------------*
-     *        |         ViewHolder index: 7 |
-     *        *-----------------------------*
-     *
-     *    Extra ViewHolders (off screen)
-     *
-     *        *-----------------------------*
-     *        |         ViewHolder index: 8 |
-     *        *-----------------------------*
-     *        |         ViewHolder index: 9 |
-     *        *-----------------------------*
-     *        |         ViewHolder index: 10|
-     *        *-----------------------------*
-     *        |         ViewHolder index: 11|
-     *        *-----------------------------*
-     *
-     *    Total number of ViewHolders = 11
-     */
+    //final private ListItemClickListener mOnClickListener;
     private static int viewHolderCount;
-
+    private Cursor mDbDataCursor;
     private int mNumberItems;
     private ArrayList<String> mMissions;
 
-    // COMPLETED (1) Add an interface called ListItemClickListener
-    // COMPLETED (2) Within that interface, define a void method called onListItemClick that takes an int as a parameter
     /**
      * The interface that receives onClick messages.
      */
@@ -112,28 +69,35 @@ public class MissionAdapter extends RecyclerView.Adapter<MissionAdapter.NumberVi
     }
 
     // COMPLETED (4) Add a ListItemClickListener as a parameter to the constructor and store it in mOnClickListener
+
     /**
      * Constructor for GreenAdapter that accepts a number of items to display and the specification
      * for the ListItemClickListener.
      *
-     * @param numberOfItems Number of items to display in list
-     * @param listener Listener for list item clicks
+     * @param listener      Listener for list item clicks
      */
-    public MissionAdapter(int numberOfItems, ListItemClickListener listener) {
-        mNumberItems = numberOfItems;
-        mOnClickListener = listener;
+    public MissionAdapter(Cursor dbItems, ListItemClickListener listener) {
+        mDbDataCursor = dbItems;
+        mNumberItems = mDbDataCursor.getCount();
+        //mOnClickListener = listener;
         mMissions = new ArrayList<String>();
         viewHolderCount = 0;
     }
 
-    public void addMission(String mission)
-    {
-        mMissions.add(mMissions.size(),mission);
-        mNumberItems ++;
+    public void SwapCursor(Cursor updatedCursor) {
+        int oldSize = mDbDataCursor.getCount();
+        if (mDbDataCursor != null) {
+            mDbDataCursor.close();
+        }
+        mDbDataCursor = updatedCursor;
+        mNumberItems = updatedCursor.getCount();
+        if (updatedCursor != null) {
+            // Force the RecyclerView to refresh
+            notifyDataSetChanged();
+        }
     }
 
     /**
-     *
      * This gets called when each new ViewHolder is created. This happens when the RecyclerView
      * is laid out. Enough ViewHolders will be created to fill the screen and allow for scrolling.
      *
@@ -153,18 +117,13 @@ public class MissionAdapter extends RecyclerView.Adapter<MissionAdapter.NumberVi
         //EditText viewData = (EditText) viewGroup.findViewById(R.id.et_output);
         View view = inflater.inflate(layoutIdForListItem, viewGroup, shouldAttachToParentImmediately);
         NumberViewHolder viewHolder = new NumberViewHolder(view);
-        if(mMissions.size() > 0) {
-            viewHolder.viewHolderText.setText(mMissions.get(mNumberItems-1).toString());//add the latest mission.. //TODO change to relevant text
-        }
+        //if(mMissions.size() > 0) {
+        //    viewHolder.viewHolderText.setText(mMissions.get(mNumberItems-1).toString());//add the latest mission.. //TODO change to relevant text
+        //}
         //viewHolder.viewHolderMission.setText("Mission: " + viewHolderCount);
 
-        //int backgroundColorForViewHolder = ColorUtils
-         //       .getViewHolderBackgroundColorFromInstance(context, viewHolderCount);
-        //viewHolder.itemView.setBackgroundColor(backgroundColorForViewHolder);
-
         viewHolderCount++;
-        Log.d(TAG, "onCreateViewHolder: number of ViewHolders created: "
-                + viewHolderCount);
+        //Log.d(TAG, "onCreateViewHolder: number of ViewHolders created: "+ viewHolderCount);
         return viewHolder;
     }
 
@@ -180,11 +139,24 @@ public class MissionAdapter extends RecyclerView.Adapter<MissionAdapter.NumberVi
      */
     @Override
     public void onBindViewHolder(NumberViewHolder holder, int position) {
-        Log.d(TAG, "#" + position);
-        if(mMissions.size() > position) {
+
+        if (!mDbDataCursor.moveToPosition(position))//if nothing in the pos return..
+        {
+            return;
+        }
+        String desc = mDbDataCursor.getString(mDbDataCursor.getColumnIndex(MissionContract.MissionEntry.COLUMN_MISSION_DESC));
+        String dueDate = mDbDataCursor.getString(mDbDataCursor.getColumnIndex(MissionContract.MissionEntry.COLUMN_DUE_DATE));
+        holder.viewHolderText.setText(desc + " " + dueDate);
+        holder.listItemNumberView.setText(String.valueOf(position + 1));
+        long id = mDbDataCursor.getLong(mDbDataCursor.getColumnIndex(MissionContract.MissionEntry._ID));
+        holder.itemView.setTag(id);
+        //Log.d(TAG, desc + " " + dueDate);
+        //old
+        /*if(mMissions.size() > position) {
             holder.viewHolderText.setText(mMissions.get(position));
         }
-        holder.bind(position);
+
+        holder.bind(position);*/
     }
 
     /**
@@ -199,11 +171,12 @@ public class MissionAdapter extends RecyclerView.Adapter<MissionAdapter.NumberVi
     }
 
     // COMPLETED (5) Implement OnClickListener in the NumberViewHolder class
+
     /**
      * Cache of the children views for a list item.
      */
     class NumberViewHolder extends RecyclerView.ViewHolder
-        implements OnClickListener {
+        /*implements OnClickListener*/ {
 
         // Will display the position in the list, ie 0 through getItemCount() - 1
         TextView listItemNumberView;
@@ -215,6 +188,7 @@ public class MissionAdapter extends RecyclerView.Adapter<MissionAdapter.NumberVi
          * Constructor for our ViewHolder. Within this constructor, we get a reference to our
          * TextViews and set an onClickListener to listen for clicks. Those will be handled in the
          * onClick method below.
+         *
          * @param itemView The View that you inflated in
          *                 {@link MissionAdapter#onCreateViewHolder(ViewGroup, int)}
          */
@@ -225,16 +199,18 @@ public class MissionAdapter extends RecyclerView.Adapter<MissionAdapter.NumberVi
             viewHolderText = (TextView) itemView.findViewById(R.id.tv_view_holder_text);
             //viewHolderMission = (TextView) itemView.findViewById(R.id.tv_view_holder_mission);
             // COMPLETED (7) Call setOnClickListener on the View passed into the constructor (use 'this' as the OnClickListener)
-            itemView.setOnClickListener(this);
+            //itemView.setOnClickListener(this);
         }
 
         /**
          * A method we wrote for convenience. This method will take an integer as input and
          * use that integer to display the appropriate text within a list item.
+         *
          * @param listIndex Position of the item in the list
          */
         void bind(int listIndex) {
-            listItemNumberView.setText(String.valueOf(listIndex +1));
+            listItemNumberView.setText(String.valueOf(listIndex + 1));
+
         }
 
 
@@ -243,7 +219,8 @@ public class MissionAdapter extends RecyclerView.Adapter<MissionAdapter.NumberVi
          * Called whenever a user clicks on an item in the list.
          * @param v The View that was clicked
          */
-        @Override
+
+        /*
         public void onClick(View v) {
             final int clickedPosition = getAdapterPosition();
             //mOnClickListener.onListItemClick(clickedPosition);//No Toast today :)
@@ -263,10 +240,11 @@ public class MissionAdapter extends RecyclerView.Adapter<MissionAdapter.NumberVi
                             new DialogInterface.OnClickListener() {
                                 public void onClick(DialogInterface dialog,
                                                     int id) {
-                                    mMissions.remove(clickedPosition);
+                                    mMissions.remove(clickedPosition);//TODO update for db...
                                     mNumberItems--;
                                     notifyItemRemoved(clickedPosition);
                                     notifyItemRangeChanged(clickedPosition, mNumberItems);
+                                    //mDbDataCursor.
                                 }
                             })
                     .setNegativeButton("Cancel",
@@ -281,6 +259,7 @@ public class MissionAdapter extends RecyclerView.Adapter<MissionAdapter.NumberVi
             // show it
             alertDialog.show();
             /////////
-        }
+        }*/
     }
 }
+
